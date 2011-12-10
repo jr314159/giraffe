@@ -1,0 +1,276 @@
+#include "../objtypes.h"
+#include "../tiletypes.h"
+#include "../../input.h"
+
+/* Just some temporary physics values: */
+#define PLAYER_MAX_WALKING_VEL 125
+#define PLAYER_MAX_RUNNING_VEL 400
+#define PLAYER_ON_GROUND_ACCEL 500
+#define PLAYER_ON_GROUND_FRICTION 600
+#define PLAYER_IN_AIR_ACCEL 500
+#define PLAYER_MAX_FALLING_VEL 600
+
+#define PLAYER_JUMP_IMPULSE 3000
+
+#define BULLET_VELOCITY 400
+
+#define ANIM_SPEED .20
+
+struct player_atts
+{
+  int hitpoints;
+  int on_ground;
+  float jump_power;
+  int running;
+  int facing;
+  int shooting;
+};
+
+
+static Bound *bounds(void)
+{
+
+  Bound *head;
+  Bound *b;
+  int bound_type = LINE;
+
+  MALLOC(head, sizeof(Bound));
+
+  b = head; 
+  if (bound_type == RECT) 
+    {
+      /* The player's boundaries are just a box, slightly smaller than the
+     dimensions of the player: */
+      
+      
+      b->type = RECT;
+      b->b.rect.p1.x = 10;
+      b->b.rect.p1.y = 3;
+      b->b.rect.p2.x = 40;
+      b->b.rect.p2.y = 64;
+    }
+  else if (bound_type == LINE)
+    {
+
+      // Bottom
+      b->type = LINE;
+      b->b.line.p1.x = 40;
+      b->b.line.p1.y = 64;
+      b->b.line.p2.x = 10;
+      b->b.line.p2.y = 64;
+      
+      
+      // Left
+      MALLOC(b->next, sizeof(Bound));
+      b = b->next;
+      b->type = LINE;
+      b->b.line.p2.x = 10;
+      b->b.line.p2.y = 3;
+      b->b.line.p1.x = 10;
+      b->b.line.p1.y = 64;
+      
+      
+      // Right
+      MALLOC(b->next, sizeof(Bound));
+      b = b->next;
+      b->type = LINE;
+      b->b.line.p1.x = 40;
+      b->b.line.p1.y = 3;
+      b->b.line.p2.x = 40;
+      b->b.line.p2.y = 64;
+      
+      //Top
+      MALLOC(b->next, sizeof(Bound));
+      b = b->next;
+      b->type = LINE;
+      b->b.line.p1.x = 10;
+      b->b.line.p1.y = 3;
+      b->b.line.p2.x = 40;
+      b->b.line.p2.y = 3;
+
+    }
+  b->next = NULL;
+
+  return head;
+}
+
+static void *init_atts(void)
+{
+  struct player_atts *atts;
+
+  /* Initialize the object-specific attributes: */
+
+  MALLOC(atts, sizeof(struct player_atts));
+
+  atts->hitpoints = 30;
+  atts->on_ground = 0;
+  atts->facing = LEFT;
+  atts->jump_power = 2.0;
+  atts->running = 0;
+  atts->shooting = 0;
+  return (void *) atts;
+}
+
+static void free_atts(Object *me)
+{
+  struct player_atts *atts;
+  atts = (struct player_atts *) me->atts;
+  free(atts);
+}
+
+static void go(Object *me, Time dt)
+{
+
+  struct player_atts *atts;
+  Signal sig;
+
+  atts = (struct player_atts *) me->atts;
+
+
+  /* Process signals */
+  while (sig_poll(&me->signals, &sig))
+    {
+      switch (sig.type)
+	{
+	case IMPULSE_SIG:
+	  switch (sig.sig.imp.hit.type)
+	    {
+	    case TILE_TYPE:
+	      switch (sig.sig.imp.hit.u.tile_type)
+		{
+		case NONE_T:
+		  /* If the player got an impulse with a vector pointing up
+		     from a solid tile, it's on the ground. */
+		  if (sig.sig.imp.vec.y < 0)
+		    atts->on_ground = 1;
+		  /* If the player was knocked from above, make him fall */
+		  else if (sig.sig.imp.vec.y > 0)
+		    {
+		      atts->jump_power = 0;
+		    }
+		  break;
+		}
+	      break;
+	    }
+	  break;
+	}
+    }
+
+
+  /* Jumping! */
+  /* If the player has jump power and the jump key is down, change his
+     velocity and decrease his jump power */
+  if (atts->jump_power > 0 && inp_isDown(JUMP_KEY))
+    {
+      me->vel.y -= PLAYER_JUMP_IMPULSE * atts->jump_power * dt;
+      atts->jump_power -= 5 * dt;
+      atts->on_ground = 0;
+    }
+  /* If the player has jump power but he's not on the ground and the jump
+     key is down, take away his jump power */
+  else if (atts->jump_power > 0 && !atts->on_ground && !inp_isDown(JUMP_KEY))
+    {
+      atts->jump_power = 0;
+    }
+  /* If the player is on the ground and he's not holding the jump key,
+     give his jump power back */
+  else if (atts->on_ground && !inp_isDown(JUMP_KEY))
+    {
+      atts->jump_power = 2.0;
+    }
+
+  /* Shooting: */
+  if (inp_isDown(SHOOT_KEY) && !atts->shooting)
+    {
+      /* Spawn a bullet: */
+      Point p;
+      Velocity v;
+      atts->shooting = 1;
+
+      p.y = me->pos.y;
+      p.x = (atts->facing == RIGHT) ? (me->pos.x + me->w / 2 + 5) :
+	(me->pos.x - me->w / 2 - 5);
+      v.y = 0;
+      v.x = (atts->facing == RIGHT) ? (BULLET_VELOCITY) : (-BULLET_VELOCITY);
+      obj_spawnObj(me->layer, p, v, BULLET_TYPE);
+      obj_makeSound(me, "piew", 0);
+    }
+  else if (atts->shooting && !inp_isDown(SHOOT_KEY)) atts->shooting = 0;
+
+  /* Running: */
+  if (inp_isDown(RUN_KEY)) atts->running = 1;
+  else if (atts->running == 1 && !inp_isDown(RUN_KEY)) atts->running = 0;
+
+
+  /* Let the player walk if he is on the ground */
+  if (atts->on_ground == 1)
+    {
+      me->vel.x += inp_getHoriz() * PLAYER_ON_GROUND_ACCEL * dt 
+	* ((atts->running) ? 2 : 1);
+
+      me->vel.x = LIMIT(me->vel.x, ((atts->running) ? PLAYER_MAX_RUNNING_VEL :PLAYER_MAX_WALKING_VEL));
+
+      /* Slow the player down if he is not walking */
+      if (me->vel.x != 0 && !inp_getHoriz())
+	{
+	  me->vel.x = DECREASE(me->vel.x, PLAYER_ON_GROUND_FRICTION * dt);
+	}
+    }
+  /* Let the player move if he is in the air.  This is not castlevania 3. */
+  else
+    {
+      me->vel.x += inp_getHoriz() * PLAYER_IN_AIR_ACCEL * dt
+	* ((atts->running) ? 2 : 1);
+      me->vel.x = LIMIT(me->vel.x, ((atts->running) ? PLAYER_MAX_RUNNING_VEL : PLAYER_MAX_WALKING_VEL));
+    }
+
+  /* Set the player's animations: */
+  if (inp_getHoriz() != 0)
+    {
+      if (inp_getHoriz() == RIGHT)
+	{
+	  if (atts->facing != RIGHT)
+	    {
+	      obj_setAnim("walk_right", me);
+	      atts->facing = RIGHT;
+	    }
+	}
+      else if (inp_getHoriz() == LEFT)
+	{
+	  if (atts->facing != LEFT)
+	    {
+	      obj_setAnim("walk_left", me);
+	      atts->facing = LEFT;
+	    }
+	}
+
+      obj_setAnimSpeed(me, 10 * ((atts->running) ? 2 : 1));
+    }
+
+  else
+    {
+      /* The player is moving, but not on his own power, so make him animate
+	 at a speed relative to his velocity */
+      obj_setAnimSpeed(me, fabs(me->vel.x) / 10);
+    }
+
+  /* Simulate gravity: */
+   me->vel.y += 2000 * dt;
+   me->vel.y = LIMIT(me->vel.y, PLAYER_MAX_FALLING_VEL);
+}
+
+struct obj_att_define player_def =
+{
+  /*mass = */ 3,
+  /*w = */ 50,
+  /*h = */ 70,
+  /*elasticity = */ 0,
+  /*friction = */ 0,
+  /*solid = */ 1,
+  /*sprite = */ "player",
+  /*animation = */ "walk_left",
+  /*bounds = */ bounds,
+  /*init_atts = */ init_atts,
+  /*go = */ go,
+  /*free_atts = */ free_atts
+};

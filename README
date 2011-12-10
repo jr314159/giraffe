@@ -1,0 +1,34 @@
+README 02-08-04
+
+The Giraffe Project
+Joel Rosen
+Winter Term Project 03-04
+
+This is a demo of my game engine.
+
+The music is from Megaman 2 by Capcom.  The sounds and artwork are original.
+
+Required libraries:
+SDL
+SDL_image
+SDL_mixer
+SDL_gfx
+
+To compile and run:
+% ./configure
+% make
+% cp src/giraffe .
+% ./giraffe
+
+(If for some reason it complains that it can't find the data files,
+edit the DATA_PREFIX definition in src/file.h)
+
+Controls:
+z = shoot, run
+x = jump
+arrow keys = go left, right
+
+f4 = switch fullscreen mode
+esc = quit
+
+For a full technical explanation of the game, see doc/giraffe.txt

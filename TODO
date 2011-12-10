@@ -1,0 +1,27 @@
+* Better file system. At the least, to be able to distinguish relative 
+	filenames and to resolve them.
+
+* Maybe a real animation file format?
+
+* Game state type module thing.  Something that can keep track of the overall
+  state of the game, and which will keep track of loading the right areas,
+  etc.  Also should be able to receive signals from objects or tiles related
+  to game state.
+
+* Tools for objects so they can interact better with their environment.  In 
+  particular, the ability for the player object to see if it is standing on
+  something, and the ability for walking monsters to see if they are about
+  to walk off an edge, etc.  Probably move some of the general geometry code
+  from collision.c into a separate module so that these functions can use the
+  vector/line intersection code and whatnot.  This will allow me rewrite the
+  gravity and jumping code for the player so that we can only apply gravity
+  if the player is not standing on something -- this way, I could get the
+  player walking up slopes without so much difficulty.
+
+* Friction in collisions.
+
+* Improved sound effect system.
+
+* Graphical layers in the maps.  Sometimes you just want a graphic to scroll
+  around on the screen, without having to split it up into tiles.  This will
+  also involve a little bit of changing to the parallax scrolling code.
